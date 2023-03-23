@@ -3,8 +3,6 @@ package org.keysupport.api.pojo.vss;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.validation.constraints.NotBlank;
-
 import org.springframework.boot.jackson.JsonComponent;
 
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
@@ -14,9 +12,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
+import jakarta.validation.constraints.NotBlank;
+
 @JsonComponent
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({ "validationPolicyId", "x509Certificate" })
+@JsonPropertyOrder({ "validationPolicyId", "x509Certificate", "requestId" })
 public class VssRequest {
 
 	/**
@@ -32,6 +32,12 @@ public class VssRequest {
 	@NotBlank
 	@JsonProperty("x509Certificate")
 	public String x509Certificate;
+
+	/**
+	 * Field requestId.
+	 */
+	@JsonProperty("requestId")
+	public String requestId;
 
 	/*
 	 * additionalProperties getter and setter allows us to ignore fields unknown or

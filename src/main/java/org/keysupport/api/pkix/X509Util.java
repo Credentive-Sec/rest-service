@@ -6,18 +6,23 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.UUID;
 
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.ASN1Primitive;
 import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.ASN1TaggedObject;
+import org.bouncycastle.asn1.BERTags;
 import org.bouncycastle.asn1.DEROctetString;
 import org.bouncycastle.asn1.x509.GeneralName;
-import org.jose4j.base64url.internal.apache.commons.codec.binary.Base64;
 import org.keysupport.api.pojo.vss.SANValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +72,8 @@ public class X509Util {
 		/*
 		 * We are pulling the DER encoded value of subjectAltName and we are going to
 		 * parse each SAN value manually
+		 * 
+		 * The result should be rendered compatible with JSON
 		 */
 		encodedExtension = certificate.getExtensionValue("2.5.29.17");
 		x509SubjectAltName = new ArrayList<>();
@@ -96,21 +103,22 @@ public class X509Util {
 					 * Remove prepended "#", if it exists. Assuming it is injected by Java code
 					 * somewhere, because that character is not part of the literal encoding.
 					 */
-					String rawFascnValue = value.getObject().toString().toUpperCase();
+
+					String rawFascnValue = value.getBaseUniversal(true, BERTags.OCTET_STRING).toString().toUpperCase();
 					if (rawFascnValue.startsWith("#")) {
 						rawFascnValue = rawFascnValue.substring(1);
 					}
 					SANValue fascn = new SANValue();
-					fascn.type = "otherName:pivFASC-N";
+					fascn.type = "otherName#pivFASC-N";
 					fascn.value = rawFascnValue;
 					x509SubjectAltName.add(fascn);
+				} else if (typeId.equals(new ASN1ObjectIdentifier("1.3.6.1.4.1.311.20.2.3"))) {
 					/*
 					 * userPrincipalName (1.3.6.1.4.1.311.20.2.3)
 					 */
-				} else if (typeId.equals(new ASN1ObjectIdentifier("1.3.6.1.4.1.311.20.2.3"))) {
 					SANValue upn = new SANValue();
-					upn.type = "otherName:userPrincipalName";
-					upn.value = value.getObject().toString();
+					upn.type = "otherName#userPrincipalName";
+					upn.value = value.getBaseUniversal(true, BERTags.UTF8_STRING).toString();
 					x509SubjectAltName.add(upn);
 				} else {
 					SANValue ukOther = new SANValue();
@@ -190,6 +198,26 @@ public class X509Util {
 	}
 
 	/**
+	 * Return Hex String of SHA-256 digest of the input string
+	 *
+	 * @param str
+	 * @return
+	 */
+	public static String strS256HexString(String str) {
+		byte[] digest = null;
+		MessageDigest md = null;
+		try {
+			md = MessageDigest.getInstance("SHA-256");
+			md.update(str.getBytes(StandardCharsets.UTF_8));
+			digest = md.digest();
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
+		String strS256 = byteArrayToHexString(digest);
+		return strS256;
+	}
+
+	/**
 	 * Return Base64 String of SHA-256 digest of the certificate
 	 *
 	 * @param cert
@@ -207,21 +235,84 @@ public class X509Util {
 		}
 		String x5tS256 = null;
 		try {
-			x5tS256 = Base64.encodeBase64String(digest);
+			x5tS256 = java.util.Base64.getEncoder().encodeToString(digest);
 		} catch (Throwable e) {
-			LOG.error("Error decoding certificate, returning SERVICEFAIL", e);
+			LOG.error("Error base64 encoding digest result", e);
 		}
 		return x5tS256;
 	}
 
+	
 	/**
 	 * Return a UUID derived from the UTF-8 String provided
-	 * 
+	 *
 	 * @param name
 	 * @return
 	 */
 	public static UUID uuidFromName(String name) {
 		return UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8));
+	}
+
+	public static String ISO8601DateString(Date date) {
+		String dateString = null;
+		SimpleDateFormat dFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+		dFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+		dateString = dFormat.format(date);
+		return dateString;
+	}
+
+	public static Date ISO8601DateFromString(String dateString) {
+		SimpleDateFormat dFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+		Date d = null;
+		try {
+			d = dFormat.parse(dateString);
+		} catch (ParseException e) {
+			LOG.error("Unable to parse date", e);
+		}
+		return d;
+	}
+
+	/**
+	 * Convert a byte array to a Hex String
+	 * 
+	 * The following method converts a byte[] object to a String object, where
+	 * the only output characters are "0123456789ABCDEF".
+	 * 
+	 * @param ba
+	 *            A byte array
+	
+	 * @return String Hexidecimal String object which represents the contents of
+	 *         the byte array */
+	public static String byteArrayToHexString(byte[] ba) {
+		if (ba == null) {
+			return "";
+		}
+		StringBuffer hex = new StringBuffer(ba.length * 2);
+		for (int i = 0; i < ba.length; i++) {
+			hex.append(Integer.toString((ba[i] & 0xff) + 0x100, 16)
+					.substring(1));
+		}
+		return hex.toString().toUpperCase(Locale.US);
+	}
+
+	public static Date dateFromHttpHeader(String headerDateValue) {
+		SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
+		Date d = null;
+		try {
+			d = format.parse(headerDateValue);
+		} catch (ParseException e) {
+			LOG.error("Unable to parse date", e);
+		}
+		return d;
+	}
+
+	public static String ISO8601DateStringFromHttpHeader(String headerDateValue) {
+		return ISO8601DateString(dateFromHttpHeader(headerDateValue));
+	}
+
+	public static int calculateCacheTTL(Date then) {
+		Date now = new Date();
+		return (int)(then.getTime()-now.getTime())/1000;
 	}
 
 }

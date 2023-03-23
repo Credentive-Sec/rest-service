@@ -4,8 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.validation.constraints.NotBlank;
-
 import org.springframework.boot.jackson.JsonComponent;
 
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
@@ -15,11 +13,19 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
+import jakarta.validation.constraints.NotBlank;
+
 @JsonComponent
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({ "x5t#S256", "x509SubjectName", "x509IssuerName", "x509SerialNumber", "x509SubjectAltName",
+@JsonPropertyOrder({ "requestId", "x5t#S256", "x509SubjectName", "x509IssuerName", "x509SerialNumber", "x509SubjectAltName",
 		"validationTime", "nextUpdate", "validationResultToken", "validationFailureData", "validationSuccessData" })
 public class VssResponse {
+
+	/**
+	 * Field requestId.
+	 */
+	@JsonProperty("requestId")
+	public String requestId;
 
 	/**
 	 * Field x5t#S256.
@@ -63,7 +69,6 @@ public class VssResponse {
 	/**
 	 * Field nextUpdate.
 	 */
-	@NotBlank
 	@JsonProperty("nextUpdate")
 	public String nextUpdate;
 

@@ -4,32 +4,28 @@
 
 - Enter into project directory, and initialize and deploy to your AWS account
 
-- Make note of S3 bucket supporting the code deploy, or create in advance
+- Elasticache cluster must be added in advance, and make sure the EBS hosts can talk to your cluster using an appropriate security group
 
 ```
 eb init
-eb setenv SPRING_PROFILES_ACTIVE=beanstalk -e api-keysupport-rest-dev
-eb setenv SERVER_PORT=5000 -e api-keysupport-rest-dev
-eb setenv S3_BUCKET=elasticbeanstalk-us-east-1-216896468348 -e api-keysupport-rest-dev
-eb setenv BASE_URI=https://api.keysupport.org -e api-keysupport-rest-dev
-eb use my-env-name
+eb use api-keysupport-rest-dev
+eb setenv SPRING_PROFILES_ACTIVE=beanstalk
+eb setenv SERVER_PORT=5000
+eb setenv MEMCACHED_CNF=api-keysupport-rest.vdmmtc.cfg.use1.cache.amazonaws.com
+eb setenv S3_BUCKET=elasticbeanstalk-us-east-1-216896468348
+eb setenv BASE_URI=https://api.keysupport.org
 eb list
 eb create --single
 ```
 
-Deploy the configuration directory to the bucket
-
-```
-aws s3 sync configuration s3://elasticbeanstalk-us-east-1-216896468348/configuration
-```
-
-Deploy the application
+- Deploy the application
 
 ```
 mvn clean package spring-boot:repackage
 eb deploy
 eb status
 ```
+
 - Scale the number of nodes to 2
 
 ```
@@ -38,6 +34,6 @@ eb scale 2
 
 ## TLS & Default Deploy Security Considerations
 
-Deploying to Elasic Beanstalk according to the steps above will default to HTTP without TLS.
+Deploying to Elastic Beanstalk according to the steps above will default to HTTP without TLS.
 
-Rather than altering the Elastic Load Balancer with a custom domain and certificate, I opted to use the AWS API Gateway with a custom domiain.
+Rather than altering the Elastic Load Balancer with a custom domain and certificate, I opted to use the AWS API Gateway with a custom domain.
