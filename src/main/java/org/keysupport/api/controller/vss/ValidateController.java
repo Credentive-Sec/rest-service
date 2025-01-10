@@ -7,13 +7,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -53,9 +51,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
@@ -80,12 +80,17 @@ public class ValidateController {
 	private VssResponse response;
 
 	@PostMapping(path = "/vss/v2/validate", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-	@io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Certificate Validation Request", required = true, content = @Content(schema = @Schema(implementation = VssRequest.class), mediaType = MediaType.APPLICATION_JSON_VALUE, examples = {
+	@io.swagger.v3.oas.annotations.parameters.RequestBody(
+			description = "Certificate Validation Request", 
+			required = true, 
+			content = @Content(schema = @Schema(implementation = VssRequest.class), 
+			mediaType = MediaType.APPLICATION_JSON_VALUE, 
+			examples = {
 			@ExampleObject(name = "A validation request using a valid DoD Issuing CA certificate", value = "{\n"
 					+ "  \"validationPolicyId\": \"c21f969b-5f03-333d-83e0-4f8f136e7682\",\n"
 					+ "  \"x509Certificate\": \"MIIEuTCCA6GgAwIBAgICBUwwDQYJKoZIhvcNAQELBQAwWzELMAkGA1UEBhMCVVMxGDAWBgNVBAoTD1UuUy4gR292ZXJubWVudDEMMAoGA1UECxMDRG9EMQwwCgYDVQQLEwNQS0kxFjAUBgNVBAMTDURvRCBSb290IENBIDMwHhcNMjEwNjAxMTQxMTIzWhcNMjcwNjAyMTQxMTIzWjBaMQswCQYDVQQGEwJVUzEYMBYGA1UEChMPVS5TLiBHb3Zlcm5tZW50MQwwCgYDVQQLEwNEb0QxDDAKBgNVBAsTA1BLSTEVMBMGA1UEAxMMRE9EIElEIENBLTY1MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnkK9OCQ+D0b/7SLsEs0LCElhKIzGtiZDBw9VLqCaxTHlxaYEPV/B/X9NGoP5PE4ToBOSramLCMPbwjadhNk8O0gEInZCuEzV17vvx6O4xg+FJ9OO76LU1KeXJnnvX1YnCKz3uxrn3sw1jQugEEd1yPwKoHMjJ2Sr7Vgrm1e983EgiRint9lble7x/MDLvEZDELeeqhPZvRiz1qwVG+/p2ks980qFLFLl1INOUSPnSLIbafg7cWE9yTC5i99s4pJnP2ThyBv6JsgFzbbj9FEYGyh75GjIMEv8ulcQ3ATOSBREUPzrd6sQmideeqvxXrDYxo8Qel6brZiti+5vEr3OzQIDAQABo4IBhjCCAYIwHwYDVR0jBBgwFoAUbIqUonexgHIdgXoWqvLczmbuRcAwHQYDVR0OBBYEFGLgSDhWbW9rJb67w4hYsaycQ8lbMA4GA1UdDwEB/wQEAwIBhjBnBgNVHSAEYDBeMAsGCWCGSAFlAgELJDALBglghkgBZQIBCycwCwYJYIZIAWUCAQsqMAsGCWCGSAFlAgELOzAMBgpghkgBZQMCAQMNMAwGCmCGSAFlAwIBAxEwDAYKYIZIAWUDAgEDJzASBgNVHRMBAf8ECDAGAQH/AgEAMAwGA1UdJAQFMAOAAQAwNwYDVR0fBDAwLjAsoCqgKIYmaHR0cDovL2NybC5kaXNhLm1pbC9jcmwvRE9EUk9PVENBMy5jcmwwbAYIKwYBBQUHAQEEYDBeMDoGCCsGAQUFBzAChi5odHRwOi8vY3JsLmRpc2EubWlsL2lzc3VlZHRvL0RPRFJPT1RDQTNfSVQucDdjMCAGCCsGAQUFBzABhhRodHRwOi8vb2NzcC5kaXNhLm1pbDANBgkqhkiG9w0BAQsFAAOCAQEAF8Uj33K0ZM9adtfd8IM2ebqwgbgRxi22Pb6bKkKOkGV2NU4wMckpuRpUrQGJmy6CIXZ84QWz9DZSNAU0nyHXB6PLbSV0jnzKygWO7IOv83M6dcnCG8QUP1o20V0NGhzNBEtKjxWENZCYHEruxm+2rB+MBngPhkBgdni2npetHX2e1cmsgMS6G1PUh2idhZ8Mpdofnr+V0GuKLpwiNz3hLnKehl2Bs6aHG2IIOm/PdzvsKCP2eiGzS3SiiCf6fukYoYBNedL8fHfFNyM4UPNgc4eG+bu0GJK4wKPVjiX7xYDdGaYZ2m4Y++zrKuMq+Oar6DQGq3SERMAZCDYsEt3z2g==\"\n"
 					+ "}"),
-			@ExampleObject(name = "A validation request using an invalid end-entity certificate", value = "{\n"
+			@ExampleObject(name = "A validation request using an revoked end-entity certificate", value = "{\n"
 					+ "  \"validationPolicyId\": \"c21f969b-5f03-333d-83e0-4f8f136e7682\",\n"
 					+ "  \"x509Certificate\": \"MIIKNzCCCB+gAwIBAgIEYIWQKTANBgkqhkiG9w0BAQsFADCBuzETMBEGCgmSJomT8ixkARkWA3NidTEVMBMGCgmSJomT8ixkARkWBXN0YXRlMRYwFAYDVQQDDA1Db25maWd1cmF0aW9uMREwDwYDVQQDDAhTZXJ2aWNlczEcMBoGA1UEAwwTUHVibGljIEtleSBTZXJ2aWNlczEMMAoGA1UEAwwDQUlBMTYwNAYDVQQDDC1VLlMuIERlcGFydG1lbnQgb2YgU3RhdGUgQUQgSGlnaCBBc3N1cmFuY2UgQ0EwHhcNMjIwNjI5MTIzNjA3WhcNMjUwNjI5MTMwNjA3WjCBljETMBEGCgmSJomT8ixkARkWA3NidTEVMBMGCgmSJomT8ixkARkWBXN0YXRlMRswGQYKCZImiZPyLGQBGRYLYXBwc2VydmljZXMxHDAaBgNVBAsME0VudGVycHJpc2UgU2VydmljZXMxDDAKBgNVBAsMA1BLSTEMMAoGA1UECwwDVEFQMREwDwYDVQQDDAhUQVBUZXN0NDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALScG/lyri4gpn3ZEX1KCmulT7zpjGjhZtB+2nzd6LM3ulj5PavgKE7Y2kOs5mge691a6RaW89u/xubvHxDL/FEzd2jxvfjJST64bejhVjqIc1zt/E1YZlv1ClK927wWqmq4PsyP63FV1UyEOO9HvrUZ5AFI/n1HMJm+zuYVXiPCgUMOmqAkceN5GznoN9AVbNgkz2tI/3PqYCtfpy6CYs+LCpXyx7/Wcf65W3PJy6xr6hVUBSKUCryl76A5xS+eM5cvF1C0BfSPBtQBbpdbGJTKs3oh4DhLNfFbBPG6Es6LicHAHpQywiCE6X0ia+btzIe4CJoOPn1NGHwtGViBJzsCAwEAAaOCBWQwggVgMA4GA1UdDwEB/wQEAwIGwDApBgNVHSUEIjAgBggrBgEFBQcDAgYKKwYBBAGCNxQCAgYIKwYBBQUHAwQwQQYDVR0gBDowODAMBgpghkgBZQMCAQYBMAwGCmCGSAFlAwIBBgIwDAYKYIZIAWUDAgEGAzAMBgpghkgBZQMCAQYEMIICMgYIKwYBBQUHAQEEggIkMIICIDBEBggrBgEFBQcwAoY4aHR0cDovL2NybHMucGtpLnN0YXRlLmdvdi9BSUEvQ2VydHNJc3N1ZWRUb0RvU0FESEFDQS5wN2MwgcgGCCsGAQUFBzAChoG7bGRhcDovL2Rpci5wa2kuc3RhdGUuZ292L2NuPVUuUy4lMjBEZXBhcnRtZW50JTIwb2YlMjBTdGF0ZSUyMEFEJTIwSGlnaCUyMEFzc3VyYW5jZSUyMENBLGNuPUFJQSxjbj1QdWJsaWMlMjBLZXklMjBTZXJ2aWNlcyxjbj1TZXJ2aWNlcyxjbj1Db25maWd1cmF0aW9uLGRjPXN0YXRlLGRjPXNidT9jQUNlcnRpZmljYXRlO2JpbmFyeTCBzwYIKwYBBQUHMAKGgcJsZGFwOi8vZGlyLnBraS5zdGF0ZS5nb3YvY249VS5TLiUyMERlcGFydG1lbnQlMjBvZiUyMFN0YXRlJTIwQUQlMjBIaWdoJTIwQXNzdXJhbmNlJTIwQ0EsY249QUlBLGNuPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLGNuPVNlcnZpY2VzLGNuPUNvbmZpZ3VyYXRpb24sZGM9c3RhdGUsZGM9c2J1P2Nyb3NzQ2VydGlmaWNhdGVQYWlyO2JpbmFyeTA7BggrBgEFBQcwAYYvaHR0cDovL29jc3AucGtpLnN0YXRlLmdvdi9PQ1NQL0RvU09DU1BSZXNwb25kZXIwLQYDVR0RBCYwJKAiBgorBgEEAYI3FAIDoBQMElRhcFRlc3Q0QHN0YXRlLmdvdjCCAgEGA1UdHwSCAfgwggH0MIIBFaCCARGgggENhjFodHRwOi8vY3Jscy5wa2kuc3RhdGUuZ292L2NybHMvRG9TQURQS0lIQUNBLTEuY3JshoHXbGRhcDovL2Rpci5wa2kuc3RhdGUuZ292L2NuPVdpbkNvbWJpbmVkMSxjbj1VLlMuJTIwRGVwYXJ0bWVudCUyMG9mJTIwU3RhdGUlMjBBRCUyMEhpZ2glMjBBc3N1cmFuY2UlMjBDQSxjbj1BSUEsY249UHVibGljJTIwS2V5JTIwU2VydmljZXMsY249U2VydmljZXMsY249Q29uZmlndXJhdGlvbixkYz1zdGF0ZSxkYz1zYnU/Y2VydGlmaWNhdGVSZXZvY2F0aW9uTGlzdDtiaW5hcnkwgdiggdWggdKkgc8wgcwxEzARBgoJkiaJk/IsZAEZFgNzYnUxFTATBgoJkiaJk/IsZAEZFgVzdGF0ZTEWMBQGA1UEAwwNQ29uZmlndXJhdGlvbjERMA8GA1UEAwwIU2VydmljZXMxHDAaBgNVBAMME1B1YmxpYyBLZXkgU2VydmljZXMxDDAKBgNVBAMMA0FJQTE2MDQGA1UEAwwtVS5TLiBEZXBhcnRtZW50IG9mIFN0YXRlIEFEIEhpZ2ggQXNzdXJhbmNlIENBMQ8wDQYDVQQDDAZDUkw4NzQwKwYDVR0QBCQwIoAPMjAyMjA2MjkxMjM2MDdagQ8yMDI0MDgwNDE3MDYwN1owHwYDVR0jBBgwFoAUheMozyV6pgGNxW/+xVJyqp6jTE4wHQYDVR0OBBYEFJEQPx/gZOO50vXJRGxBPNbmm2XEMAkGA1UdEwQCMAAwDQYJKoZIhvcNAQELBQADggIBAFxgss5EJJ0dBpgN3Rh+F2o65DxUrRYSxK++wPQuJ/YJmyUf2ns0581nfAVLDutuL0MjDdZqeT2WkUNTvvVVcYrHvainF9ZTwHpZ0XNhAOJ6IbVGiz1bhQBAi9MSMenAgnXYZ18IFUq8Sg/EyutvDlKtydMPzqJXJW/f7+0r95HJnuvVZPhsB3YdHotxQ0GXAdQhRLKHWR2Grx/NcWtFG9mMNsMez0DeY8EuOqllx34gCvgHwQ/UP8Ng2oJBkRMMEVKCzCnQVHEirpV0PM8LRrjeLeu2+Zsx1Cwf/AhgcYQIhCLWJjXyBKeD8joVmyuWBrsP4JPrxgp/tSMDhfOuS+w3pllVHK53CyXWigxXdolEeePUpAh3jmlm0nK3vUIbz0hHJf1bwhJJAEl+F1QMiDTHfbB2xFHnYlN48AU6hK6g9eG49t05NcEbPCTCUjE+T6gi+qqvjXeZ+685fTHjgeBCaKSord0RgUhYrwHOYeErW8Oih4SB+5ryl5pvKAzwvgJ34LsTxcVK1QOZsIovTIH1pWEYBhd9YWWF6zevQKkxcnMRa+YOGIzPJwH/RMr86mEoU02JGCCoNw89raetcSNBt7ikDiJ5EWcrb7VmqXCEEwZl8mea7I7/NhktQQC5wqq9uArf/mU279MzfHSxH1VosCLWBXWxUcWhKW6eMxry\"\n"
 					+ "}"),
@@ -100,7 +105,13 @@ public class ValidateController {
 			@ExampleObject(name = "A validation request using a public trust certificate", value = "{\n"
 					+ "  \"validationPolicyId\": \"c21f969b-5f03-333d-83e0-4f8f136e7682\",\n"
 					+ "  \"x509Certificate\": \"MIIFYjCCBEqgAwIBAgIRAOgIWMWQtieIECed/Q2JONIwDQYJKoZIhvcNAQELBQAwRjELMAkGA1UEBhMCVVMxIjAgBgNVBAoTGUdvb2dsZSBUcnVzdCBTZXJ2aWNlcyBMTEMxEzARBgNVBAMTCkdUUyBDQSAxRDQwHhcNMjIxMDEwMjAwMDU2WhcNMjMwMTA4MjAwMDU1WjAZMRcwFQYDVQQDEw5rZXlzdXBwb3J0Lm9yZzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALftackigK3dmFReOqr4txPVJrdTPRMbsz3+4ueBGtBd2OIKcFXDi8apCf76Fh8WBheDVOyDzUhkag+mTnPw0BXqYNyFntPcwosDkv7kviJgF4KmSWf3myTYmHoc0CAqoRqYsfTFkB7fK83OBnevqSZ8pgc2X7h6qSgx9Z/0dprl+2mWndIB82SZSCzpuaGXs5SPFDZVrB8Y7fUWqu1nPaTLfOzIlAIf8SHf1+f81D0Mg1rm/rAAi9HFwx+fLPnFvZUUWeErPEi9JmBJzU+TJdF3dDRldtJVgFdQXcvMMwgSjmlL+ToOwf/VRU/usIVGxLI/qoxLj+Y97ht5tzMILXMCAwEAAaOCAnYwggJyMA4GA1UdDwEB/wQEAwIFoDATBgNVHSUEDDAKBggrBgEFBQcDATAMBgNVHRMBAf8EAjAAMB0GA1UdDgQWBBQHEqvLbOftuY4bf2Ojy3InQEZctzAfBgNVHSMEGDAWgBQl4hgOsleRlCrl1F2GkIPeU7O4kjB4BggrBgEFBQcBAQRsMGowNQYIKwYBBQUHMAGGKWh0dHA6Ly9vY3NwLnBraS5nb29nL3MvZ3RzMWQ0L1NRMUZ6enViUFlNMDEGCCsGAQUFBzAChiVodHRwOi8vcGtpLmdvb2cvcmVwby9jZXJ0cy9ndHMxZDQuZGVyMBkGA1UdEQQSMBCCDmtleXN1cHBvcnQub3JnMCEGA1UdIAQaMBgwCAYGZ4EMAQIBMAwGCisGAQQB1nkCBQMwPAYDVR0fBDUwMzAxoC+gLYYraHR0cDovL2NybHMucGtpLmdvb2cvZ3RzMWQ0L0oyajNSQ2lFeTA0LmNybDCCAQUGCisGAQQB1nkCBAIEgfYEgfMA8QB3AHoyjFTYty22IOo44FIe6YQWcDIThU070ivBOlejUutSAAABg8PAFU0AAAQDAEgwRgIhAInKXSrciK8OHtFWvQienDeIwBGCfDojh62EeoD62ngyAiEA6HO5HRCE00qCIKNCx6CuS9gDkvgrNm4xIS+gPc5Z8i8AdgCt9776fP8QyIudPZwePhhqtGcpXc+xDCTKhYY069yCigAAAYPDwBVHAAAEAwBHMEUCIQDOGktHy094r8OdqDhS7IPj44qJ1V9RRdR2ZEq4Sz5WOwIgcAlszeHnUNnp/jlDJPk1vIBJxh8/lokFwDBFiUU1EhAwDQYJKoZIhvcNAQELBQADggEBAGiaDoyFu4aLlLvsYnIVlTvf6bfUZ0xf3F9gSyjJBxFxFMF4BTiWWbCXGCpBT7+hHLSvq2fKKzKn2bR17XnDJkcVNBA5kxc9MQu6YE26+QkV4nk23hNidmaRimuiq4FLivsp/9gDrU+q5lutXP6n7EYI0ibXtuGk+Tx/qW9xvT4V9snhhw+4ks0Yw0B3AcdwNqRgmKYOftOLDPivLe5+lTmxbiMIPXSvkXzGVDFwj8/D8APp173Jg6XmHPHC9DSYF33e0q3nmmKQOV3PjR4mlFkY5Ewv9pKLJRnbwp01CArMs2YYdSqERZnLCH69lcHM/kuEKgMmdgLnEky2Xa03c84=\"\n"
-					+ "}") }))
+					+ "}"),
+			@ExampleObject(name = "A validation request using Valid - Recently Issued - 2025 FCPCAG2 Signed Treasury Root - IAL3/AAL3 Policy", value = "{\n"
+					+ "  \"validationPolicyId\": \"cc54e0ec-49da-333a-8150-2dd00b758b17\",\n"
+					+ "  \"x509Certificate\": \"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\"\n"
+					+ "}")}))
+	@ApiResponse(responseCode = "201", content = @Content(schema = @Schema(implementation = VssResponse.class)))
+	@ApiResponse(responseCode = "400", content = @Content(schema = @Schema(implementation = ApiError.class)))
 	@CrossOrigin(origins = "*")
 	ResponseEntity<VssResponse> validate(@RequestBody VssRequest request, @RequestHeader Map<String, String> headers) {
 		ObjectMapper mapper = new ObjectMapper();
@@ -172,7 +183,14 @@ public class ValidateController {
 		 */
 		x5tS256 = X509Util.x5tS256(clientCert);
 		/*
-		 * Derive requestId
+		 * Derive requestId, which is used for the entity E-Tag, as well as GET requests
+		 * 
+		 * The client can also derive the requestId in order to attempt a GET request, before POST.
+		 * 
+		 * This would yield a much faster response from the cache, or; a 404 if not cached.
+		 * 
+		 * - Client derives s5t#S256, which is the base64 encoded, SHA-256 digest of the certificate.
+		 * - Client digests the UTF-8 value of of the String: "<x5t#S256 Base64 Value>:<validationPolicyId>"
 		 */
 		requestId = X509Util.strS256HexString(x5tS256 + ":" + valPol.validationPolicyId);
 
@@ -201,7 +219,6 @@ public class ValidateController {
 		ElasticacheClient mcClient = client.getCacheClient();
 		byte[] cachedResponse = mcClient.get(requestId);
 		if (null != cachedResponse) {
-			LOG.info("We found a cached response, attempting to return to client");
 			String strResponse = new String(cachedResponse, StandardCharsets.UTF_8);
 			try {
 				response = mapper.readValue(strResponse, VssResponse.class);
@@ -211,10 +228,19 @@ public class ValidateController {
 				LOG.error("Error converting JSON to POJO", e);
 			}
 			if (null != response) {
-				return new ResponseEntity<>(response, HttpStatus.OK);
+				/*
+				 * Log and return cached response
+				 */
+				LOG.info("{\"ValidationResponse\":" + strResponse + "}");
+				String getUri = BASE_URI + "/vss/v2/validate/getByRequestId/" + requestId;
+				Date lastModified = X509Util.ISO8601DateFromString(response.validationTime);
+				return ResponseEntity.created(URI.create(getUri))
+						.cacheControl(CacheControl.maxAge(valPol.validCacheLifetime / 60, TimeUnit.MINUTES).cachePublic())
+						.eTag(requestId)
+						.lastModified(lastModified.toInstant())
+						.body(response);
 			}
 		}
-		LOG.info("No cached response found, validating certificate per clients request");
 		/*
 		 * Validate, log, and; return the result
 		 */
@@ -223,24 +249,18 @@ public class ValidateController {
 		Date dNow = new Date(lNow);
 		response = ValidatePKIX.validate(clientCert, x5tS256, valPol, dNow);
 		ValidationResult respResult = response.validationResult;
+		response.validationTime = X509Util.ISO8601DateString(dNow);
 		/*
-		 * Set validationTime and nextUpdate in the response
-		 *
-		 * Date Format now conforms to ISO 8601:
-		 *
-		 * http://xkcd.com/1179/
-		 */
-		SimpleDateFormat dFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
-		dFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
-		response.validationTime = dFormat.format(dNow);
-		/*
-		 * TODO: nextUpdate will be based on CRL, for now we will calculate a date that
-		 * is one hour from now.
+		 * nextUpdate is based on the validation policy.
 		 */
 		Calendar calendar = Calendar.getInstance();
 		calendar.setTime(dNow);
-		calendar.add(Calendar.HOUR_OF_DAY, 1);
-		response.nextUpdate = dFormat.format(calendar.getTime());
+		if (response.validationResult.result == ValidationResult.SUCCESS_VALUE) {
+			calendar.add(Calendar.SECOND, valPol.validCacheLifetime);
+		} else {
+			calendar.add(Calendar.SECOND, valPol.inValidCacheLifetime);
+		}
+		response.nextUpdate = X509Util.ISO8601DateString(calendar.getTime());
 		String validationNow = X509Util.ISO8601DateString(dNow);
 		if (respResult != null) {
 			if (respResult instanceof Success) {
@@ -267,32 +287,30 @@ public class ValidateController {
 			 * - CREATED for valid certificates, for 15 minutes
 			 * - OK for invalid certificates, for 24 hours
 			 * 
-			 * TODO: Address invalidity reasons that may arise due to lack of intermediate
-			 * or revocation data.
 			 */
 			if (respResult != null) {
 				if (respResult instanceof Success) {
-					LOG.info("Caching valid response with 15min TTL, with Key: " + requestId);
-					mcClient.putWithTtl(requestId, 900, output.getBytes(StandardCharsets.UTF_8));
+					LOG.info("Caching valid response with " + valPol.validCacheLifetime + "sec TTL, with Key: " + requestId);
+					mcClient.putWithTtl(requestId, valPol.validCacheLifetime, output.getBytes(StandardCharsets.UTF_8));
 					/*
 					 * Created response requires a URI to GET the entity, by requestId
 					 */
 					String getUri = BASE_URI + "/vss/v2/validate/getByRequestId/" + requestId;
 					return ResponseEntity.created(URI.create(getUri))
-							.cacheControl(CacheControl.maxAge(15, TimeUnit.MINUTES).cachePublic()).eTag(requestId).lastModified(vNow).body(response);
+							.cacheControl(CacheControl.maxAge(valPol.validCacheLifetime / 60, TimeUnit.MINUTES).cachePublic()).eTag(requestId).lastModified(vNow).body(response);
 				} else if (respResult instanceof Fail) {
 					/*
 					 * We won't perform a validation operation on a certificate we've deemed invalid for a period of time:
 					 * 
-					 * - 24 Hours is the current default
+					 * - 7 Days is the current default
 					 * - The notAfter date *could* be used, but also abused via certificates that have no valid path
 					 * 
 					 * TODO: We should consider caching revoked certificate validations based on the certificate Expiration date.
 					 */
-					LOG.info("Caching invalid response with 24hr TTL, with Key: " + requestId);
-					mcClient.putWithTtl(requestId, 86400, output.getBytes(StandardCharsets.UTF_8));
+					LOG.info("Caching invalid response with" + valPol.inValidCacheLifetime + "TTL, with Key: " + requestId);
+					mcClient.putWithTtl(requestId, valPol.inValidCacheLifetime, output.getBytes(StandardCharsets.UTF_8));
 					return ResponseEntity.ok()
-							.cacheControl(CacheControl.maxAge(24, TimeUnit.HOURS).cachePublic()).eTag(requestId).lastModified(vNow).body(response);
+							.cacheControl(CacheControl.maxAge(valPol.inValidCacheLifetime / 60, TimeUnit.MINUTES).cachePublic()).eTag(requestId).lastModified(vNow).body(response);
 				} else {
 					ResponseEntity.badRequest();
 				}
@@ -309,17 +327,19 @@ public class ValidateController {
 	}
 
 	@GetMapping(path = "/vss/v2/validate/getByRequestId/{requestId}", produces = MediaType.APPLICATION_JSON_VALUE)
+	@Operation(description="Get Cached Validation Response by requestId<br><br>" 
+	  		+ "The requestId is a SHA-256 digest Hex string (64 characters) that is derived via the following:<br><br>"
+	  		+ "- Construct a UTF-8 String by first combining the calculated x5t#S256 value of the certificate and the valididationPolicyId, seperated with a colon<br>"
+	  		+ "- SHA-256 digest the String byte[] value, and convert the digest value to a HEX String.")
+	@ApiResponse(responseCode = "200", content = @Content(schema = @Schema(implementation = VssResponse.class)))
+	@ApiResponse(responseCode = "404", content = @Content(schema = @Schema(defaultValue = "")))
 	@CrossOrigin(origins = "*")
 	ResponseEntity<VssResponse> validate(@PathVariable String requestId, @RequestHeader Map<String, String> headers) {
 		ObjectMapper mapper = new ObjectMapper();
 		HTTPClientSingleton client = HTTPClientSingleton.getInstance();
 		ElasticacheClient mcClient = client.getCacheClient();
 		/*
-		 * TODO: Make sure this endpoint can't be used to harvest non-VssResponse data
-		 * from our cache.
-		 * 
-		 * For now, we will check to ensure the requestId is limited to a Hex SHA-256
-		 * value @ 64 characters
+		 * The requestId is limited to a Hex SHA-256 value @ 64 characters
 		 */
 		String headerJson = null;
 		try {
@@ -335,7 +355,6 @@ public class ValidateController {
 		} else {
 			byte[] cachedResponse = mcClient.get(requestId);
 			if (null != cachedResponse) {
-				LOG.info("We found a cached response, attempting to return to client");
 				String strResponse = new String(cachedResponse, StandardCharsets.UTF_8);
 				try {
 					response = mapper.readValue(strResponse, VssResponse.class);
@@ -360,9 +379,6 @@ public class ValidateController {
 		}
 	}
 
-	/*
-	 * TODO: Expand on error handling based on the exception or logic error
-	 */
 	@ExceptionHandler({ Exception.class })
 	public ResponseEntity<Object> handleAll(Exception e, WebRequest request) {
 		ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, e.getLocalizedMessage());

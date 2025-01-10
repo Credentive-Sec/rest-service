@@ -13,13 +13,17 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509CRL;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
-import org.keysupport.api.pkix.X509Util;
 import org.keysupport.api.pkix.cache.ElasticacheClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * This class uses a singleton pattern to manage our HTTP client needs.
@@ -37,6 +41,8 @@ public class HTTPClientSingleton {
 	private final String mimeCms = "application/pkcs7-mime";
 
 	private final String mimeTextPlainUtf8 = "text/plain; charset=utf-8";
+	
+	private final int MAX_ENTITY_SIZE = 1000000;
 
 	private HttpClient client = null;
 
@@ -65,9 +71,8 @@ public class HTTPClientSingleton {
 		/*
 		 * Set a custom User-Agent to identify calls from this code
 		 *
-		 * TODO: Eventually change to use build info
-		 */
-		/*
+		 * TODO: Address all TTLs via config or policy
+		 *
 		 * Initial caching test, where we will cache all data via the call with the
 		 * default 1hr TTL.
 		 */
@@ -84,28 +89,50 @@ public class HTTPClientSingleton {
 			try {
 				response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
 			} catch (IOException e) {
-				LOG.error("Error GETing data", e);
+				LOG.error(e.getClass().getName() + " with GET request: " + uri.toASCIIString() + ": " + e.getCause().getMessage());
+				return null;
 			} catch (InterruptedException e) {
-				LOG.error("Error GETing data", e);
+				LOG.error(e.getClass().getName() + " with GET request: " + uri.toASCIIString() + ": " + e.getCause().getMessage());
+				return null;
+			} catch (IllegalArgumentException  e) {
+				LOG.error(e.getClass().getName() + " with GET request: " + uri.toASCIIString() + ": " + e.getCause().getMessage());
+				return null;
+			} catch (SecurityException e) {
+				LOG.error(e.getClass().getName() + " with GET request: " + uri.toASCIIString() + ": " + e.getCause().getMessage());
+				return null;
 			}
-			java.net.http.HttpHeaders headers = response.headers();
-			List<String> cControl = headers.allValues("Cache-Control");
-			for (String curVal : cControl) {
-				LOG.info("Header:Cache-Control:value: " + curVal);
-			}
-			Optional<String> eTag = headers.firstValue("ETag");
-			if (eTag.isPresent()) {
-				LOG.info("Header:ETag:value: " + eTag.get());
-			}
-			Optional<String> lastModified = headers.firstValue("Last-Modified");
-			if (lastModified.isPresent()) {
-				LOG.info("Header:Last-Modified:value: " + X509Util.ISO8601DateStringFromHttpHeader(lastModified.get()));
+			Map<String, List<String>> headers = response.headers().map();
+			ObjectMapper mapper = new ObjectMapper();
+			try {
+				String output = mapper.writeValueAsString(headers);
+				LOG.info("{\"ResponseHeaders\":" + output + "}");
+			} catch (JsonGenerationException e) {
+				LOG.error("Error converting POJO to JSON", e);
+			} catch (JsonMappingException e) {
+				LOG.error("Error converting POJO to JSON", e);
+			} catch (IOException e) {
+				LOG.error("Error converting POJO to JSON", e);
 			}
 			/*
-			 * Cache the response, and return to the client
+			 * Cache the response, and return to the client, so long as we received a 200
+			 * 
 			 */
-			mcClient.put(uri.toASCIIString(), response.body());
-			return response.body();
+			if (response.statusCode() == HttpStatus.OK.value()) {
+				byte[] responseBody = response.body();
+				if (null == responseBody) {
+					LOG.error("Received null entity from " + uri.toASCIIString());
+					return null;
+				} else if (responseBody.length >= MAX_ENTITY_SIZE) {
+					LOG.error("Entity from " + uri.toASCIIString() + " exceeds " + MAX_ENTITY_SIZE + "bytes");
+					return null;
+				} else {
+					mcClient.put(uri.toASCIIString(), responseBody);
+					return response.body();
+				}
+			} else {
+				LOG.error("Received HTTP " + response.statusCode() + " status from " + uri.toASCIIString());
+				return null;
+			}
 		}
 	}
 
@@ -145,6 +172,10 @@ public class HTTPClientSingleton {
 
 	public CertPath getCms(URI uri) {
 		byte[] cmsBytes = getData(uri, mimeCms);
+		if (null == cmsBytes) {
+			LOG.error("CMS not received from: " + uri.toASCIIString());
+			return null;
+		}
 		CertPath cp = null;
 		CertificateFactory cf = null;
 		try {
@@ -162,7 +193,12 @@ public class HTTPClientSingleton {
 
 	public String getText(URI uri) {
 		byte[] textBytes = getData(uri, mimeTextPlainUtf8);
-		return new String(textBytes, StandardCharsets.UTF_8);
+		if (null != textBytes) {
+			return new String(textBytes, StandardCharsets.UTF_8);
+		} else {
+			LOG.error("Unexpected null response from: " + uri.toASCIIString());
+			return null;
+		}
 	}
 
 	public ElasticacheClient getCacheClient() {

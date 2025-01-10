@@ -10,25 +10,29 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
+import jakarta.validation.constraints.NotBlank;
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({ "trustAnchorId", "trustAnchorSubject", "x509Certificate" })
+@JsonPropertyOrder({ "x5t#S256", "X509SubjectName", "x509Certificate" })
 public class JsonTrustAnchor {
 
 	/**
-	 * Field trustAnchorId.
+	 * Field x5t#S256
 	 */
-	@JsonProperty("trustAnchorId")
-	public String trustAnchorId;
+	@NotBlank
+	@JsonProperty("x5t#S256")
+	public String x5tS256;
 
 	/**
-	 * Field trustAnchorSubject.
+	 * Field X509SubjectName.
 	 */
-	@JsonProperty("trustAnchorSubject")
-	public String trustAnchorSubject;
+	@JsonProperty("x509SubjectName")
+	public String x509SubjectName;
 
 	/**
 	 * Field x509Certificate.
 	 */
+	@NotBlank
 	@JsonProperty("x509Certificate")
 	public String x509Certificate;
 

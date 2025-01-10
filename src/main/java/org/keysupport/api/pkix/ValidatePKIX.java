@@ -1,6 +1,5 @@
 package org.keysupport.api.pkix;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.NoSuchAlgorithmException;
@@ -15,9 +14,7 @@ import java.security.cert.CertStore;
 import java.security.cert.CertStoreParameters;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
-import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.CertificateRevokedException;
 import java.security.cert.CollectionCertStoreParameters;
@@ -29,7 +26,6 @@ import java.security.cert.X509CertSelector;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -39,9 +35,11 @@ import org.keysupport.api.controller.ServiceException;
 import org.keysupport.api.pkix.cache.singletons.IntermediateCacheSingleton;
 import org.keysupport.api.pojo.vss.Fail;
 import org.keysupport.api.pojo.vss.JsonX509Certificate;
+import org.keysupport.api.pojo.vss.PKIXPolicyNode;
 import org.keysupport.api.pojo.vss.Success;
 import org.keysupport.api.pojo.vss.ValidationPolicy;
 import org.keysupport.api.pojo.vss.VssResponse;
+import org.keysupport.api.singletons.ValidationPoliciesSingleton;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,32 +55,44 @@ public class ValidatePKIX {
 
 	private final static int MAX_PATH_LENGTH = 7;
 
-	/*
-	 * TODO:  For now, we will stick with the SUN provider since it can fetch CRL and OCSP data.
+	/**
+	 * <pre>
+	 * 
+	 * For now, we will stick with the SUN provider since it can fetch CRL and
+	 * OCSP data.
 	 *
 	 * https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/sun/security/provider/certpath/URICertStore.java
 	 *
-	 * If we were to create an internal variant of the SUN URICertStore, then we could use it with the BC Certpath provider.
+	 * If we were to create an internal variant of the SUN URICertStore, then we
+	 * could use it with the BC Certpath provider.
+	 * 
+	 * </pre>
 	 */
 	private final static String CERTPATH_PROVIDER = "SUN";
 
 	private final static String CERTPATH_ALGORITHM = "PKIX";
 
-	/*
-	 * TODO: For now, use the BC signature provider until BCFIPS is avail for OpenJDK/Corretto 17
+	/**
+	 * <pre>
+	 * TODO: For now, use the BC signature provider until BCFIPS is avail for
+	 * OpenJDK/Corretto 17
+	 * 
+	 * - https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-45146
+	 * </pre>
 	 */
 	private final static String JCE_PROVIDER = "BC";
-	
+
 	public static VssResponse validate(X509Certificate cert, String x5tS256, ValidationPolicy valPol, Date now) {
-		/*
+		/**
+		 * <pre>
+		 *  		 
 		 * Begin Set JCE Signature Provider and System/Security variables
 		 *
-		 * <pre>
-		 * Set System and Security properties to make the Sun provider: - Fetch CRLs via
-		 * the CDP extension - Check OCSP via the AIA extension - Chase CA Issuers via
-		 * the AIA extension
-		 *
-		 * TODO: Consider writing our own provider that leverages cached objects.
+		 * Set System and Security properties to make the Sun provider:
+		 * 
+		 * - Fetch CRLs via the CDP extension
+		 * - Check OCSP via the AIA extension
+		 * - Chase CA Issuers via the AIA extension
 		 *
 		 * The AIA and CDP chases would be valuable to update a local cache.
 		 *
@@ -91,37 +101,67 @@ public class ValidatePKIX {
 		 * relying party is willing to trust).
 		 *
 		 * See:
+		 * 
 		 * https://docs.oracle.com/en/java/javase/11/security/java-pki-programmers-guide.html
 		 *
-		 * -
-		 * https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/sun/security/provider/certpath/RevocationChecker.java
+		 * - https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/sun/security/provider/certpath/RevocationChecker.java
 		 *
 		 * Debug logging for CertPath can be enabled running the code via:
 		 *
 		 * - java -Djava.security.debug=certpath -jar target/rest-service-eb.jar
 		 *
-		 * <pre>
+		 * </pre>
 		 */
 		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-		System.setProperty("com.sun.security.enableCRLDP", "true");
-		Security.setProperty("ocsp.enable", "true");
 		/*
+		 * *Temporary Testing a non-revocation testing option*
+		 * 
+		 */
+		Boolean revocationCheckingDisabled = false;
+		if (revocationCheckingDisabled) {
+			Security.setProperty("ocsp.enable", "false");
+		} else {
+			System.setProperty("com.sun.security.enableCRLDP", "true");
+			Security.setProperty("ocsp.enable", "true");
+		}
+		/**
+		 * <pre>
+		 * 
 		 * Draft Local OCSP Service providing responses for all FPKI Intermediates.
 		 * 
-		 * See: https://docs.oracle.com/en/java/javase/17/security/java-pki-programmers-guide.html#GUID-E6E737DB-4000-4005-969E-BCD0238B1566
+		 * See:
 		 * 
-		 * If enabled, we should not rely on the following property:
+		 * https://docs.oracle.com/en/java/javase/17/security/java-pki-programmers-guide.html#GUID-E6E737DB-4000-4005-969E-BCD0238B1566
+		 * 
+		 * If enabled, we should not rely on the following properties:
 		 * 
 		 * System.setProperty("com.sun.security.enableCRLDP", "true");
+		 * Security.setProperty("ocsp.enable", "true");
+		 * 
+		 * The preference is to not beacon human credential use.  
+		 * 
+		 * It is much more efficient for us to consider local revocation 
+		 * data caching (expecting ~2Gb/24hr for FPKI) via CRLs.
+		 * 
+		 * Some teams *may* want to consider an internal OCSP responder, 
+		 * where the revocation source data is CRL based, and; can 
+		 * discover from any certificate that is successfully validated.
+		 * 
+		 * Below are the properties that should be set in lieu of the 
+		 * System/Security properties above to enable OCSP and CRL DP Download:
+		 * 
+		 * Security.setProperty("ocsp.responderURL", "http://{host}/");
+		 * Security.setProperty("ocsp.responderCertIssuerName", "{issuer}");
+		 * Security.setProperty("ocsp.responderCertSerialNumber", "{signing-cert-serial}");
+		 * 
+		 * </pre>
 		 */
-		//Security.setProperty("ocsp.responderURL", "http://{host}/");
-		//Security.setProperty("ocsp.responderCertIssuerName", "{issuer}");
-		//Security.setProperty("ocsp.responderCertSerialNumber", "{signing-cert-serial}");
-		
 		/*
 		 * Disable AIA fetch to restrict our intermediate store
+		 * 
+		 * TODO: Consider this as an option
 		 */
-		System.setProperty("com.sun.security.enableAIAcaIssuers", "false");
+		System.setProperty("com.sun.security.enableAIAcaIssuers", "true");
 		/*
 		 * End Set JCE Signature Provider and System/Security variables
 		 */
@@ -129,6 +169,10 @@ public class ValidatePKIX {
 		 * Process the request
 		 */
 		VssResponse response = new VssResponse();
+		/*
+		 * Add Validation Policy
+		 */
+		response.validationPolicyId = valPol.validationPolicyId;
 		/*
 		 * When decoding the certificate contents, don't always assume that the fields
 		 * will be non-NULL. For example, cardAuth certs MAY have a NULL subject name.
@@ -143,6 +187,29 @@ public class ValidatePKIX {
 			response.x509SerialNumber = cert.getSerialNumber().toString();
 		}
 		/*
+		 * TODO: populate subjectKeyIdentifer
+		 */
+
+		if (cert.getBasicConstraints() == -1) {
+			/*
+			 * This is not a CA
+			 */
+			response.isCA = Boolean.FALSE;
+		} else {
+			/**
+			 * <pre>
+			 * This is a CA:
+			 * 
+			 * - https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/security/cert/V1X509Certificate.html#getBasicConstraints()
+			 * 
+			 * "the value of pathLenConstraint if the BasicConstraints extension is present
+			 *  in the certificate and the subject of the certificate is a CA, otherwise -1."
+			 * 
+			 * </pre>
+			 */
+			response.isCA = Boolean.TRUE;
+		}
+		/*
 		 * Get subjectAltName values, swallow the exception as far as the consumer is
 		 * concerned, but log it.
 		 */
@@ -152,7 +219,9 @@ public class ValidatePKIX {
 			LOG.error("Error parsing Certificate SAN.", e);
 		}
 		/*
-		 * Add x5t#S256
+		 * Add x5t#S256, because we are checking temporal validity next.
+		 * 
+		 * We can render a *much* faster validity result in this case.
 		 */
 		response.x5tS256 = x5tS256;
 		try {
@@ -173,48 +242,22 @@ public class ValidatePKIX {
 			return response;
 		}
 		/*
-		 * TODO: Before we dive into RFC5280, we should perform a minimum algorithm/keySize
-		 * check.
+		 * TODO: Before we dive into RFC5280, we should perform a minimum
+		 * algorithm/keySize check.
 		 *
 		 * Set RFC 5280 Inputs based on the selected certificate and validation policy
+		 * 
+		 * This seems easy to do with the SUN JCE Provider, but; we are using the BC
+		 * provider (targeting BCFIPS)
 		 */
 		X509CertSelector selector = new X509CertSelector();
 		selector.setCertificate(cert);
 		/*
 		 * Initialize the TrustAnchor via the ValidationPolicy.
-		 *
-		 * TODO: Address policies that indicate multiple trust anchors, for now; we will
-		 * only inject the first trust anchor defined in the validation policy.
 		 */
-		String pemCert = valPol.trustAnchors.get(0).x509Certificate;
-		X509Certificate ta = null;
-		try {
-			byte[] certBytes = null;
-			CertificateFactory cf = null;
-			ByteArrayInputStream bais = null;
-			try {
-				certBytes = Base64.getDecoder().decode(pemCert);
-			} catch (Throwable e) {
-				LOG.error("Internal Validation Error", e);
-				throw new ServiceException("Internal Validation Error");
-			}
-			if (null != certBytes) {
-				cf = CertificateFactory.getInstance("X509");
-				bais = new ByteArrayInputStream(certBytes);
-				ta = (X509Certificate) cf.generateCertificate(bais);
-			} else {
-				LOG.error("Internal Validation Error, null certBytes");
-				throw new ServiceException("Internal Validation Error");
-			}
-		} catch (CertificateException e) {
-			LOG.error("Internal Validation Error", e);
-			throw new ServiceException("Internal Validation Error");
-		}
-		LOG.debug("Trust Anchor:\n" + ta.toString());
-		TrustAnchor anchor = new TrustAnchor(ta, null);
 		List<Certificate> cert_list = new ArrayList<>();
-		cert_list.add(ta);
-		cert_list.add(cert);
+		ValidationPoliciesSingleton validationPoliciesSingleton = ValidationPoliciesSingleton.getInstance();
+		HashSet<TrustAnchor> taList = validationPoliciesSingleton.getTrustAnchors(valPol.validationPolicyId);
 		CertStoreParameters cparam = new CollectionCertStoreParameters(cert_list);
 		CertStore cstore = null;
 		try {
@@ -225,7 +268,7 @@ public class ValidatePKIX {
 		}
 		PKIXBuilderParameters params = null;
 		try {
-			params = new PKIXBuilderParameters(Collections.singleton(anchor), selector);
+			params = new PKIXBuilderParameters(taList, selector);
 		} catch (InvalidAlgorithmParameterException e) {
 			LOG.error("Internal Validation Error", e);
 			throw new ServiceException("Internal Validation Error");
@@ -238,15 +281,22 @@ public class ValidatePKIX {
 		params.setAnyPolicyInhibited(valPol.inhibitAnyPolicy);
 		params.setMaxPathLength(MAX_PATH_LENGTH);
 		params.addCertStore(cstore);
-		/*
+		if (revocationCheckingDisabled) {
+			params.setRevocationEnabled(false);
+		} else {
+			params.setRevocationEnabled(true);
+		}
+		/**
 		 * <pre>
-		 * Add FPKI Intermediate Store from our IntermediateCacheSingleton
+		 * 
+		 * Add Intermediate Store from our IntermediateCacheSingleton
 		 *
 		 * - https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/security/cert/CertStore.html
+		 * 
 		 * </pre>
 		 */
 		IntermediateCacheSingleton intermediateCacheSingleton = IntermediateCacheSingleton.getInstance();
-		params.addCertStore(intermediateCacheSingleton.getIntermediates());
+		params.addCertStore(intermediateCacheSingleton.getIntermediates(valPol.validationPolicyId));
 		/*
 		 * Build the certificate path
 		 */
@@ -326,14 +376,20 @@ public class ValidatePKIX {
 			LOG.error("Internal Validation Error", e);
 			throw new ServiceException("Internal Validation Error");
 		}
-		LOG.debug(pvr.getPolicyTree().toString());
 		/*
-		 * If we got this far, the certificate is valid.
+		 * If we got this far, the certificate is valid. (Regardless of default
+		 * revocation checking behavior)
 		 *
-		 * Populate the ValidationSuccessData, add it to the result, and; return the
+		 * Populate the V1ValidationSuccessData, add it to the result, and; return the
 		 * result.
+		 * 
+		 * TODO: If we disable default revocation checking by policy, then; we should
+		 * consider checking revocation using a method we define (and config via policy)
 		 */
 		Success success = new Success();
+		/*
+		 * Add certPath
+		 */
 		List<JsonX509Certificate> x509CertificatePath = new ArrayList<>();
 		for (Certificate currentCert : cp.getCertificates()) {
 			JsonX509Certificate bCert = new JsonX509Certificate();
@@ -346,7 +402,13 @@ public class ValidatePKIX {
 			x509CertificatePath.add(bCert);
 		}
 		success.x509CertificatePath = x509CertificatePath;
+		/*
+		 * Add policyTree
+		 */
+		PKIXPolicyNode policyTree = X509Util.policyNodeToJSON(pvr.getPolicyTree());
+		success.policyTree = policyTree;
 		response.validationResult = success;
 		return response;
 	}
+	
 }

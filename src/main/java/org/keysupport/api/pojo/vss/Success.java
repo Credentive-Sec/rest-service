@@ -15,7 +15,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonComponent
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({ "x509CertificatePath" })
+@JsonPropertyOrder({ "x509CertificatePath", "policyTree" })
 public class Success extends ValidationResult {
 
 	/**
@@ -29,6 +29,12 @@ public class Success extends ValidationResult {
 	 */
 	@JsonProperty("x509CertificatePath")
 	public List<JsonX509Certificate> x509CertificatePath;
+
+	/**
+	 * Field policyTree
+	 */
+	@JsonProperty("policyTree")
+	public PKIXPolicyNode policyTree;
 
 	@JsonIgnore
 	private Map<String, Object> additionalProperties = new HashMap<>();
